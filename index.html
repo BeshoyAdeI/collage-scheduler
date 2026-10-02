@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Level 4 Schedule</title>
+<style>
+  :root{--bg:#f4f5f7;--card:#fff;--ink:#111;--mute:#666;--line:#222;--head:#ddd;--red:#c00000;--lechl:#bfe3ff;--labhl:#ffd0cc}
+  @media(prefers-color-scheme:dark){:root{--bg:#111318;--card:#1a1d24;--ink:#e8eaee;--mute:#9aa1ad;--line:#8a8f9a;--head:#2a2e38;--red:#ff7b7b;--lechl:#1c3a5c;--labhl:#5a2226}}
+  *{box-sizing:border-box}
+  body{margin:0;font:13px/1.35 Arial,Helvetica,sans-serif;background:var(--bg);color:var(--ink)}
+  main{max-width:1200px;margin:0 auto;padding:16px}
+  h1{font-size:18px;margin:0 0 12px}
+  .msg{color:var(--red);font-size:13px;margin:-6px 0 10px}
+  .msg.ok{color:var(--mute)}
+  .ctl{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+  .grp{display:flex;align-items:center;gap:6px}
+  .grp>span{font-weight:700;margin-right:2px}
+  .grp button{padding:7px 13px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;font-size:14px;cursor:pointer}
+  .grp button.on{background:#2563eb;color:#fff;border-color:#2563eb;font-weight:700}
+  .grp button.up{border-style:dashed}
+  .wrap{overflow-x:auto}
+  table{border-collapse:collapse;width:100%;min-width:900px;background:var(--card)}
+  th,td{border:1px solid var(--line);text-align:center;padding:4px 6px}
+  thead th{background:var(--head);font-size:12px}
+  th.day{background:var(--head);width:90px}
+  td.c{vertical-align:middle;padding:7px 6px}
+  td.c div{padding:2px 0}
+  td.c .n{font-weight:700}
+  td.red{color:var(--red)}
+  td.empty{height:30px}
+  tr.sub td.c{border-top:1px solid var(--line)}
+  td.on.lec{background:var(--lechl)}
+  td.on.lab{background:var(--labhl)}
+  body.filtering td.c:not(.on){opacity:.35}
+  .hint{margin-top:10px;color:var(--mute);font-size:12px}
+  .sw{display:inline-block;width:12px;height:12px;border:1px solid var(--line);vertical-align:-2px;margin:0 4px 0 10px}
+  #cards{display:none}
+  .dc{background:var(--card);border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden}
+  .dc h2{margin:0;padding:8px 12px;font-size:13px;background:var(--head);text-transform:uppercase}
+  .dc .free{padding:10px 12px;color:var(--mute)}
+  .ev{display:flex;gap:10px;padding:9px 12px;border-top:1px solid var(--head);font-size:14px}
+  .ev .t{width:84px;flex:none;font-weight:700;font-size:12px}
+  .ev.lab .n{color:var(--red)}
+  .ev.on.lec{background:var(--lechl)}
+  .ev.on.lab{background:var(--labhl)}
+  body.filtering .ev:not(.on){opacity:.35}
+  body.only .ev:not(.on){display:none}
+  #only{display:none}
+  @media(max-width:700px){
+    main{padding:12px}
+    h1{font-size:15px}
+    .wrap{display:none}
+    #cards{display:block}
+    #only{display:inline-block}
+    .ctl{gap:10px}
+    .grp{flex-wrap:wrap}
+    .grp button{padding:9px 14px}
+    .hint{display:none}
+  }
+  @media print{.ctl,.hint,.msg{display:none}body{background:#fff}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <div class="msg" id="msg"></div>
+  <div class="ctl">
+    <div class="grp" id="gp"><span>Group</span></div>
+    <div class="grp" id="sc"><span>Section</span></div>
+    <div class="grp"><button id="only">Only mine</button></div>
+    <div class="grp"><button id="up" class="up">Upload PDF</button><button id="reset" style="display:none">Back to default</button><input type="file" id="file" accept="application/pdf" hidden></div>
+  </div>
+  <div class="wrap"><table id="t"></table></div>
+  <div id="cards"></div>
+  <div class="hint"><span class="sw" style="background:var(--lechl);margin-left:0"></span>your lectures (group)<span class="sw" style="background:var(--labhl)"></span>your labs (section) · red = lab/section</div>
+</main>
+<script>
+// ---------- model ----------
+// model = {title, cols:['9:00 - 10:00',...], days:[{name, rows:[[cell]]}]}
+// cell  = {c:startCol, n:span, name, d:doctor, r:room, k:'lec'|'lab', g:group(0=all), s:[sections]}
+const lec=(c,name,d,r,g=0)=>({c:c*2,n:2,name,d,r,k:'lec',g,s:[]});
+const lab=(c,name,d,r,s)=>({c:c*2,n:2,name,d,r,k:'lab',g:0,s});
+const DEFAULT={
+ title:'Level 4 · Computer Science · First semester 2026-2027',
+ cols:['9:00 - 10:00','10:00 - 11:00','11:00 - 12:00','12:00 - 1:00','1:00 - 2:00','2:00 - 3:00','3:00 - 4:00','4:00 - 4:30'],
+ days:[
+ {name:'Sunday',rows:[[]]},
+ {name:'Monday',rows:[
+  [lec(0,'Machine Learning G1','Dr.Mahmoud Mounir','Room 12',1),lec(1,'Machine Learning G2','Dr.Mahmoud Mounir','Room 12',2),lab(2,'Computer Security Sec 1,3','Eng.Amr Ehab','Lab 8',[1,3]),lab(3,'Computer Security Sec 2,4','Eng.Amr Ehab','Lab 8',[2,4])],
+  [lec(0,'Compilers G2','Dr.Magdy Abdelghany','Room 9',2),lec(1,'Compilers G1','Dr.Magdy Abdelghany','Room 9',1),lab(2,'Computer Security Sec 2,4','Microsoft','Lab 5',[2,4]),lab(3,'Computer Security Sec 1,3','Microsoft','Lab 5',[1,3])]]},
+ {name:'Tuesday',rows:[[]]},
+ {name:'Wednesday',rows:[
+  [lec(0,'Computer Security G2','Dr.Hassan Elmahdy','Room 12',2),lec(1,'Computer Security G1','Dr.Hassan Elmahdy','Room 12',1),lec(2,'Digital Signal Processing','Amira Abdel-Moneim','Room 9'),lab(3,'Robotics Sec 2,4','Eng.Haidy Farag','Lab 6',[2,4])],
+  [lab(0,'Compilers Sec 1,3','Eng.Ahmed Abdelmoaty','Lab 6',[1,3]),lab(1,'Compilers Sec 2,4','Eng.Ahmed Abdelmoaty','Lab 6',[2,4]),lab(2,'Robotics Sec 1,3','Eng.Haidy Farag','Lab 6',[1,3])]]},
+ {name:'Thursday',rows:[
+  [lec(0,'Fundamentals of Economics','Dr.Engy ElSheikh','Room 9'),lab(1,'Machine Learning Sec 2,4','Eng.Fadwa Atef','Lab 9',[2,4]),lec(2,'Robotics','Dr.Mohammed Eltelbany','Room 12'),lab(3,'Machine Learning Sec 1,3','Eng.Fadwa Atef','Lab 9',[1,3])],
+  [lab(2,'Digital Signal Processing Sec 1,3','Eng.Haidy Farag','Lab 6',[1,3]),lab(3,'Digital Signal Processing Sec 2,4','Eng.Haidy Farag','Lab 6',[2,4])]]},
+ ]};
+
+const ld=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+const sv=(k,v)=>{try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}};
+let M=DEFAULT;
+try{const j=ld('model');if(j)M=JSON.parse(j)}catch(e){}
+let G=+ld('g')||0,S=+ld('s')||0,O=+ld('o')||0;
+
+// ---------- PDF parsing ----------
+let pdfjsReady;
+function loadPdfJs(){
+  if(window.pdfjsLib)return Promise.resolve();
+  return pdfjsReady||(pdfjsReady=new Promise((ok,no)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    sc.onload=()=>{pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';ok()};
+    sc.onerror=()=>{pdfjsReady=null;no(new Error('Could not load the PDF reader (are you online?)'))};
+    document.head.appendChild(sc);
+  }));
+}
+const ROOM=/\b(room|lab|hall|amph\w*|theat\w*|class\w*|rm)\b/i;
+const TIME=/^\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}$/;
+const DAY=/^(sun|mon|tue|wed|thu|fri|sat)/i;
+
+async function parsePDF(buf){
+  await loadPdfJs();
+  const doc=await pdfjsLib.getDocument({data:buf}).promise;
+  const tc=await (await doc.getPage(1)).getTextContent();
+  const items=tc.items.filter(i=>i.str.trim()).map(i=>({s:i.str,x:i.transform[4],y:i.transform[5],w:i.width}));
+  items.sort((a,b)=>b.y-a.y||a.x-b.x);
+  // merge pieces on one baseline into lines
+  const lines=[];
+  for(const it of items){
+    const l=lines.find(l=>Math.abs(l.y-it.y)<2&&it.x-l.x1<5&&it.x-l.x1>-3);
+    if(l){l.s+=(it.x-l.x1>1.5?' ':'')+it.s;l.x1=it.x+it.w}
+    else lines.push({s:it.s,x0:it.x,x1:it.x+it.w,y:it.y});
+  }
+  lines.forEach(l=>{l.s=l.s.trim().replace(/\s+/g,' ');l.cx=(l.x0+l.x1)/2;l.w=l.x1-l.x0});
+  // header: row of time ranges
+  const byY={};
+  lines.filter(l=>TIME.test(l.s)).forEach(l=>{const k=Math.round(l.y/3);(byY[k]=byY[k]||[]).push(l)});
+  const hdr=Object.values(byY).sort((a,b)=>b.length-a.length)[0];
+  if(!hdr||hdr.length<2)throw new Error('Could not find the time header row.');
+  hdr.sort((a,b)=>a.cx-b.cx);
+  const N=hdr.length,cx=hdr.map(h=>h.cx),cw=(cx[N-1]-cx[0])/(N-1),hy=hdr[0].y;
+  const cols=hdr.map(h=>h.s);
+  const body=lines.filter(l=>l.y<hy-3);
+  const days=body.filter(l=>l.cx<cx[0]-cw*.5&&DAY.test(l.s)).sort((a,b)=>b.y-a.y);
+  if(!days.length)throw new Error('Could not find day names.');
+  const cells=body.filter(l=>l.cx>cx[0]-cw*.5&&l.cx<cx[N-1]+cw*.6&&!days.includes(l));
+  // stack lines into column clusters, then split stacks into cells
+  cells.sort((a,b)=>a.cx-b.cx);
+  const clusters=[];
+  for(const l of cells){
+    const c=clusters[clusters.length-1];
+    if(c&&Math.abs(l.cx-c.avg)<cw*.2){c.l.push(l);c.avg=c.l.reduce((a,b)=>a+b.cx,0)/c.l.length}
+    else clusters.push({avg:l.cx,l:[l]});
+  }
+  const blocks=[];
+  for(const c of clusters){
+    c.l.sort((a,b)=>b.y-a.y);
+    let cur=[];
+    for(const l of c.l){
+      cur.push(l);
+      if(ROOM.test(l.s)||cur.length>=3){blocks.push(cur);cur=[]}
+    }
+    if(cur.length)blocks.push(cur);
+  }
+  // block -> cell with column span
+  const mk=b=>{
+    const bx=b.reduce((a,l)=>a+l.cx,0)/b.length,bw=Math.max(...b.map(l=>l.w));
+    let best=null;
+    for(let n=1;n<=N;n++)for(let st=0;st+n<=N;st++){
+      const cost=Math.abs(bx-(cx[st]+cx[st+n-1])/2)+.01*n+(bw>n*cw-2?1000:0);
+      if(!best||cost<best.cost)best={cost,c:st,n};
+    }
+    const t=b.map(l=>l.s);
+    let name,d='',r='';
+    if(t.length>=3){r=t.pop();d=t.pop();name=t.join(' ')}
+    else if(t.length==2){if(ROOM.test(t[1]))r=t[1];else d=t[1];name=t[0]}
+    else name=t[0];
+    const sm=name.match(/\bSec(?:tion)?s?\.?\s*(\d[\d,.\s&/-]*)/i),gm=name.match(/\bG(?:rou?p)?\s*\.?\s*(\d+)/i);
+    const secs=sm?sm[1].match(/\d+/g).map(Number):[];
+    return {c:best.c,n:best.n,name,d,r,k:secs.length?'lab':'lec',g:secs.length||!gm?0:+gm[1],s:secs,_y:b[0].y,_m:b.reduce((a,l)=>a+l.y,0)/b.length};
+  };
+  const all=blocks.map(mk).sort((a,b)=>b._y-a._y);
+  // rows: cells sharing a top line
+  const rows=[];
+  for(const c of all){const r=rows.find(r=>Math.abs(r.y-c._y)<6);r?r.c.push(c):rows.push({y:c._y,c:[c]})}
+  rows.forEach(r=>r.m=r.c.reduce((a,c)=>a+c._m,0)/r.c.length);
+  // rows -> days (nearest day label)
+  const out=days.map(d=>({name:d.s,y:d.y,rows:[]}));
+  for(const r of rows){
+    const d=out.reduce((a,b)=>Math.abs(b.y-r.m)<Math.abs(a.y-r.m)?b:a);
+    d.rows.push(r);
+  }
+  // drop footer rows below the last day's band (the band is centred on its label)
+  const last=out[out.length-1];
+  if(last.rows.length){
+    last.rows.sort((a,b)=>b.y-a.y);
+    const bottom=2*(last.y+1.5)-(last.rows[0].y+8);
+    last.rows=last.rows.filter(r=>r.y>bottom-1);
+  }
+  const model={title:'',cols,days:out.map(d=>({name:d.name,rows:d.rows.length?d.rows.map(r=>r.c.sort((a,b)=>a.c-b.c)):[[]]}))};
+  const tl=lines.find(l=>/level/i.test(l.s)&&/depart|facult|colle/i.test(l.s));
+  const yr=lines.find(l=>/20\d\d\s*-\s*20\d\d/.test(l.s));
+  model.title=[tl&&tl.s,yr&&yr.s].filter(Boolean).join(' · ')||'Uploaded schedule';
+  if(!model.days.some(d=>d.rows.some(r=>r.length)))throw new Error('No classes were found in this PDF.');
+  return model;
+}
+
+// ---------- UI ----------
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const msg=(t,ok)=>{$('msg').textContent=t||'';$('msg').className='msg'+(ok?' ok':'')};
+$('only').onclick=()=>{O=O?0:1;sv('o',O);render()};
+$('up').onclick=()=>$('file').click();
+$('reset').onclick=()=>{M=DEFAULT;sv('model',null);G=S=0;sv('g',0);sv('s',0);msg('');render()};
+$('file').onchange=async e=>{
+  const f=e.target.files[0];e.target.value='';if(!f)return;
+  msg('Reading '+f.name+'…',true);
+  try{
+    M=await parsePDF(new Uint8Array(await f.arrayBuffer()));
+    sv('model',JSON.stringify(M));G=S=0;sv('g',0);sv('s',0);
+    const n=M.days.reduce((a,d)=>a+d.rows.reduce((b,r)=>b+r.length,0),0);
+    msg(`Loaded ${f.name}: ${n} classes found. Check it against your PDF.`,true);
+  }catch(err){msg("Couldn't read that PDF: "+err.message)}
+  render();
+};
+function btns(id,max,get,set){
+  const el=$(id);el.querySelectorAll('button').forEach(b=>b.remove());
+  el.style.display=max?'':'none';
+  [0,...Array.from({length:max},(_,i)=>i+1)].forEach(v=>{
+    const b=document.createElement('button');
+    b.textContent=v?(id==='gp'?'G'+v:v):'All';
+    b.className=get()===v?'on':'';
+    b.onclick=()=>{set(v);render()};
+    el.appendChild(b);
+  });
+}
+const tm=(c,n)=>M.cols[c].split(/\s*-\s*/)[0]+' – '+M.cols[c+n-1].split(/\s*-\s*/).pop();
+function render(){
+  const cells=M.days.flatMap(d=>d.rows.flat());
+  const maxG=Math.max(0,...cells.map(c=>c.g)),maxS=Math.max(0,...cells.flatMap(c=>c.s));
+  if(G>maxG)G=0;
+  if(S>maxS)S=0;
+  $('title').textContent=M.title;
+  $('reset').style.display=M===DEFAULT?'none':'';
+  btns('gp',maxG,()=>G,v=>{G=v;sv('g',v)});
+  btns('sc',maxS,()=>S,v=>{S=v;sv('s',v)});
+  document.body.classList.toggle('filtering',!!(G||S));
+  document.body.classList.toggle('only',!!(O&&(G||S)));
+  $('only').classList.toggle('on',!!O);
+  const on=e=>e.k==='lec'?(G&&(!e.g||e.g===G)):(S&&e.s.includes(S));
+  const N=M.cols.length;
+  $('cards').innerHTML=M.days.map(d=>{
+    const ev=d.rows.flat().sort((a,b)=>a.c-b.c).map(e=>`<div class="ev ${e.k} ${on(e)?'on':''}"><div class="t">${tm(e.c,e.n)}</div><div><div class="n"><b>${esc(e.name)}</b></div><div>${[e.d,e.r].filter(Boolean).map(esc).join(' · ')}</div></div></div>`).join('');
+    return `<section class="dc"><h2>${esc(d.name)}</h2>${ev||'<div class="free">No classes</div>'}</section>`}).join('');
+  let h='<thead><tr><th>Lecture</th>'+M.cols.map((_,i)=>`<th>${i+1}</th>`).join('')+'</tr><tr><th>Day</th>'+M.cols.map(p=>`<th>${esc(p)}</th>`).join('')+'</tr></thead><tbody>';
+  for(const d of M.days)d.rows.forEach((row,ri)=>{
+    h+='<tr class="'+(ri?'sub':'')+'">';
+    if(!ri)h+=`<th class="day" rowspan="${d.rows.length}">${esc(d.name)}</th>`;
+    if(!row.length){h+=`<td class="empty" colspan="${N}"></td></tr>`;return}
+    let col=0;
+    for(const e of row){
+      if(e.c>col)h+=`<td class="empty" colspan="${e.c-col}"></td>`;
+      h+=`<td class="c ${e.k} ${e.k==='lab'?'red':''} ${on(e)?'on':''}" colspan="${e.n}"><div class="n">${esc(e.name)}</div><div>${esc(e.d)}</div><div>${esc(e.r)}</div></td>`;
+      col=e.c+e.n;
+    }
+    if(col<N)h+=`<td class="empty" colspan="${N-col}"></td>`;
+    h+='</tr>';
+  });
+  $('t').innerHTML=h+'</tbody>';
+}
+render();
+</script>
+</body>
+</html>
